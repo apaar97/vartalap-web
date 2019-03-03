@@ -8,7 +8,7 @@ var fs = require('fs-extra');
 var WaveFile = require('wavefile');
 var WavDecoder = require("wav-decoder");
 var Queue = require('better-queue');
-var exec = require('child_process').exec;
+var {exec, spawn} = require('child_process');
 var debug = require('debug');
 
 var app = express();
@@ -67,15 +67,55 @@ var queue = new Queue(function (input, callback) {
 io.on('connect', function (socket) {
     debug('a new connection is established');
 
+    accentDetectPackets = []
+
     socket.on('disconnect', function () {
         debug('connection destroyed');
+    });
+
+    socket.on('data-accent-detect', function (data) {
+        debug('incoming data');
+
+        let packetNo = data['packet-no'];
+        let socketId = data['socket-id'];
+        if (packetNo != -1) {
+            let audioBuffer = data['audio-buffer'];
+            accentDetectPackets =  accentDetectPackets.concat(audioBuffer);
+        }
+
+        let userWavDir = './temp/audio_' + socketId;
+        if (!fs.existsSync(userWavDir)) {
+            fs.mkdirSync(userWavDir);
+            fs.mkdirSync(userWavDir + '/accent-detect');
+        }
+
+        if (packetNo == -1) {
+            let wavFilePath = userWavDir + '/accent-detect/audio.wav';
+            let wav = new WaveFile();
+            wav.fromScratch(2, 44100, '64', accentDetectPackets);
+            fs.writeFileSync(wavFilePath, wav.toBuffer());
+
+            let command = "python3 speech_classifier/inference.py --wave_path='" + wavFilePath + "'";
+            exec(command, function (err, stdout, stderr) {
+                if (err) {
+                    console.error(err);
+                    socket.emit('error', err.message);
+                } else {
+                    socket.emit('detected-accent', stdout);
+                    fs.remove(userWavDir, function (err) {
+                        if (err) console.error(err);
+                        else console.log('user audio for accent detection removed');
+                    });
+                }
+            });
+        }
     });
 
     socket.on('data-original', function (data) {
         debug('incoming data');
         let wav = new WaveFile();
 
-        let packetNo = data['packet-no']
+        let packetNo = data['packet-no'];
         let socketId = data['socket-id'];
         let audioBuffer = data['audio-buffer'];
 

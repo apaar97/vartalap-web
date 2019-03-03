@@ -4,7 +4,9 @@ from collections import Counter
 from keras import Sequential
 import numpy as np
 import time
+import sys
 import argparse
+from os.path import join, abspath
 from keras.layers import Convolution2D, BatchNormalization, Activation, MaxPool2D, Flatten, Dense, Dropout
 
 RATE = 24000
@@ -124,7 +126,7 @@ def get_model():
                   optimizer='adadelta',
                   metrics=['accuracy'])
 
-    model.load_weights('model5.h5')
+    model.load_weights(join(abspath(''), 'speech_classifier', 'model5.h5'))
 
     return model
 
@@ -154,5 +156,7 @@ if __name__ == '__main__':
 
     config = parser.parse_args()
 
-    x , y = predict(config)
+    x, y = predict(config)
     print(y[x])
+
+    sys.stdout.flush()
